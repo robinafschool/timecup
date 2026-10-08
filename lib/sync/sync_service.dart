@@ -71,13 +71,28 @@ class SyncService {
     final remoteRows = await _client.from('tasks').select();
     for (final row in remoteRows) {
       final remoteId = row['id'] as String;
-      if (await _db.existsByRemoteId(remoteId)) continue;
-      await _db.insertFromRemote(
-        remoteId: remoteId,
-        name: row['name'] as String,
-        done: row['done'] as bool,
-        updatedAt: DateTime.parse(row['updated_at'] as String),
-      );
+      final name = row['name'] as String;
+      final done = row['done'] as bool;
+      final updatedAt = DateTime.parse(row['updated_at'] as String);
+      if (await _db.existsByRemoteId(remoteId)) {
+        // Row already exists locally -- it may have been renamed/toggled
+        // directly on the server since our last pull, so apply the latest
+        // remote state. updateFromRemote already skips rows with unpushed
+        // local changes, so a pending local edit still wins.
+        await _db.updateFromRemote(
+          remoteId: remoteId,
+          name: name,
+          done: done,
+          updatedAt: updatedAt,
+        );
+      } else {
+        await _db.insertFromRemote(
+          remoteId: remoteId,
+          name: name,
+          done: done,
+          updatedAt: updatedAt,
+        );
+      }
     }
   }
 
