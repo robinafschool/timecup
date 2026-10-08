@@ -129,4 +129,38 @@ class AppDatabase extends _$AppDatabase {
       ),
     );
   }
+
+  /// Applies a remote update (e.g. from a Realtime event) to the matching
+  /// local row, identified by [remoteId]. Skipped if the local row has
+  /// unpushed local changes (`dirty`), so an in-flight local edit always
+  /// wins over a remote one we haven't pushed yet.
+  Future<void> updateFromRemote({
+    required String remoteId,
+    required String name,
+    required bool done,
+    required DateTime updatedAt,
+  }) {
+    return (update(tasks)..where(
+          (t) => t.remoteId.equals(remoteId) & t.dirty.equals(false),
+        ))
+        .write(
+          TasksCompanion(
+            name: Value(name),
+            done: Value(done),
+            updatedAt: Value(updatedAt),
+          ),
+        );
+  }
+
+  /// Deletes the local row with the given local [id]. Used after a local
+  /// delete has already been (or doesn't need to be) pushed to Supabase.
+  Future<void> deleteTaskLocal(int id) {
+    return (delete(tasks)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// Deletes the local row matching a given Supabase row id. Used when a
+  /// Realtime DELETE event arrives for a row that still exists locally.
+  Future<void> deleteByRemoteId(String remoteId) {
+    return (delete(tasks)..where((t) => t.remoteId.equals(remoteId))).go();
+  }
 }

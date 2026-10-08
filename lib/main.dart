@@ -51,6 +51,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     _syncService.sync();
+    _syncService.startRealtime();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       results,
     ) {
@@ -62,6 +63,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   void dispose() {
+    _syncService.stopRealtime();
     _connectivitySubscription?.cancel();
     _textController.dispose();
     _db.close();
@@ -78,6 +80,11 @@ class _MyHomePageState extends State<MyHomePage> {
     _syncService.sync();
   }
 
+  void deleteTask(Task task) {
+    _db.deleteTaskLocal(task.id);
+    _syncService.deleteTask(task);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,10 +97,15 @@ class _MyHomePageState extends State<MyHomePage> {
               itemCount: tasks.length,
               itemBuilder: (context, index) {
                 final task = tasks[index];
-                return CheckboxListTile(
-                  title: Text(task.name),
-                  value: task.done,
-                  onChanged: (_) => toggleTask(task),
+                return Dismissible(
+                  key: ValueKey(task.id),
+                  background: Container(color: Colors.red),
+                  onDismissed: (_) => deleteTask(task),
+                  child: CheckboxListTile(
+                    title: Text(task.name),
+                    value: task.done,
+                    onChanged: (_) => toggleTask(task),
+                  ),
                 );
               },
             );
