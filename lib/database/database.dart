@@ -14,8 +14,13 @@ class Tasks extends Table {
 
   /// Last time this row was changed locally. Mirrors `updated_at` in
   /// Supabase so pulled rows can be compared against local ones.
-  DateTimeColumn get updatedAt =>
-      dateTime().withDefault(currentDateAndTime)();
+  ///
+  /// Nullable (rather than using a SQL-level default) because SQLite's
+  /// `ALTER TABLE ... ADD COLUMN` only accepts constant defaults (`NULL`,
+  /// literals, or bare `CURRENT_TIMESTAMP`) -- a `strftime(...)` expression
+  /// like `currentDateAndTime` produces is rejected during migration. The
+  /// app always supplies a value on insert/update instead.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
 
   /// True when this row has local changes that haven't been pushed yet.
   BoolColumn get dirty => boolean().withDefault(const Constant(true))();
@@ -32,9 +37,25 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (m, from, to) async {
       if (from < 2) {
-        await m.addColumn(tasks, tasks.remoteId);
-        await m.addColumn(tasks, tasks.updatedAt);
-        await m.addColumn(tasks, tasks.dirty);
+        // A previous version of this migration failed partway through
+        // (SQLite rejected a non-constant column default), which can leave
+        // some of these columns already added. Check what's actually
+        // present before adding, so re-running the migration on an
+        // already-partially-migrated database doesn't blow up with
+        // "duplicate column name".
+        final existingColumns = await customSelect(
+          "SELECT name FROM pragma_table_info('tasks')",
+        ).map((row) => row.read<String>('name')).get();
+
+        if (!existingColumns.contains('remote_id')) {
+          await m.addColumn(tasks, tasks.remoteId);
+        }
+        if (!existingColumns.contains('updated_at')) {
+          await m.addColumn(tasks, tasks.updatedAt);
+        }
+        if (!existingColumns.contains('dirty')) {
+          await m.addColumn(tasks, tasks.dirty);
+        }
       }
     },
   );
@@ -45,7 +66,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> addTask(String name) {
-    return into(tasks).insert(TasksCompanion.insert(name: name));
+    return into(tasks).insert(
+      TasksCompanion.insert(name: name, updatedAt: Value(DateTime.now())),
+    );
   }
 
   Future<void> toggleTask(Task task) {
@@ -53,7 +76,7 @@ class AppDatabase extends _$AppDatabase {
       task.copyWith(
         done: !task.done,
         dirty: true,
-        updatedAt: DateTime.now(),
+        updatedAt: Value(DateTime.now()),
       ),
     );
   }

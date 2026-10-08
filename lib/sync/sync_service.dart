@@ -28,13 +28,14 @@ class SyncService {
   Future<void> _push() async {
     final dirtyTasks = await _db.getDirtyTasks();
     for (final task in dirtyTasks) {
+      final updatedAt = task.updatedAt ?? DateTime.now();
       if (task.remoteId == null) {
         final inserted = await _client
             .from('tasks')
             .insert({
               'name': task.name,
               'done': task.done,
-              'updated_at': task.updatedAt.toIso8601String(),
+              'updated_at': updatedAt.toIso8601String(),
             })
             .select()
             .single();
@@ -45,7 +46,7 @@ class SyncService {
             .update({
               'name': task.name,
               'done': task.done,
-              'updated_at': task.updatedAt.toIso8601String(),
+              'updated_at': updatedAt.toIso8601String(),
             })
             .eq('id', task.remoteId!);
         await _db.clearDirty(task.id);

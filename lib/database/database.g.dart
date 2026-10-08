@@ -61,10 +61,9 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
     'updated_at',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
-    defaultValue: currentDateAndTime,
   );
   static const VerificationMeta _dirtyMeta = const VerificationMeta('dirty');
   @override
@@ -163,7 +162,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
-      )!,
+      ),
       dirty: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}dirty'],
@@ -188,7 +187,13 @@ class Task extends DataClass implements Insertable<Task> {
 
   /// Last time this row was changed locally. Mirrors `updated_at` in
   /// Supabase so pulled rows can be compared against local ones.
-  final DateTime updatedAt;
+  ///
+  /// Nullable (rather than using a SQL-level default) because SQLite's
+  /// `ALTER TABLE ... ADD COLUMN` only accepts constant defaults (`NULL`,
+  /// literals, or bare `CURRENT_TIMESTAMP`) -- a `strftime(...)` expression
+  /// like `currentDateAndTime` produces is rejected during migration. The
+  /// app always supplies a value on insert/update instead.
+  final DateTime? updatedAt;
 
   /// True when this row has local changes that haven't been pushed yet.
   final bool dirty;
@@ -197,7 +202,7 @@ class Task extends DataClass implements Insertable<Task> {
     required this.name,
     required this.done,
     this.remoteId,
-    required this.updatedAt,
+    this.updatedAt,
     required this.dirty,
   });
   @override
@@ -209,7 +214,9 @@ class Task extends DataClass implements Insertable<Task> {
     if (!nullToAbsent || remoteId != null) {
       map['remote_id'] = Variable<String>(remoteId);
     }
-    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
     map['dirty'] = Variable<bool>(dirty);
     return map;
   }
@@ -222,7 +229,9 @@ class Task extends DataClass implements Insertable<Task> {
       remoteId: remoteId == null && nullToAbsent
           ? const Value.absent()
           : Value(remoteId),
-      updatedAt: Value(updatedAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
       dirty: Value(dirty),
     );
   }
@@ -237,7 +246,7 @@ class Task extends DataClass implements Insertable<Task> {
       name: serializer.fromJson<String>(json['name']),
       done: serializer.fromJson<bool>(json['done']),
       remoteId: serializer.fromJson<String?>(json['remoteId']),
-      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       dirty: serializer.fromJson<bool>(json['dirty']),
     );
   }
@@ -249,7 +258,7 @@ class Task extends DataClass implements Insertable<Task> {
       'name': serializer.toJson<String>(name),
       'done': serializer.toJson<bool>(done),
       'remoteId': serializer.toJson<String?>(remoteId),
-      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'dirty': serializer.toJson<bool>(dirty),
     };
   }
@@ -259,14 +268,14 @@ class Task extends DataClass implements Insertable<Task> {
     String? name,
     bool? done,
     Value<String?> remoteId = const Value.absent(),
-    DateTime? updatedAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
     bool? dirty,
   }) => Task(
     id: id ?? this.id,
     name: name ?? this.name,
     done: done ?? this.done,
     remoteId: remoteId.present ? remoteId.value : this.remoteId,
-    updatedAt: updatedAt ?? this.updatedAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     dirty: dirty ?? this.dirty,
   );
   Task copyWithCompanion(TasksCompanion data) {
@@ -312,7 +321,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
   final Value<String> name;
   final Value<bool> done;
   final Value<String?> remoteId;
-  final Value<DateTime> updatedAt;
+  final Value<DateTime?> updatedAt;
   final Value<bool> dirty;
   const TasksCompanion({
     this.id = const Value.absent(),
@@ -353,7 +362,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
     Value<String>? name,
     Value<bool>? done,
     Value<String?>? remoteId,
-    Value<DateTime>? updatedAt,
+    Value<DateTime?>? updatedAt,
     Value<bool>? dirty,
   }) {
     return TasksCompanion(
@@ -421,7 +430,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       required String name,
       Value<bool> done,
       Value<String?> remoteId,
-      Value<DateTime> updatedAt,
+      Value<DateTime?> updatedAt,
       Value<bool> dirty,
     });
 typedef $$TasksTableUpdateCompanionBuilder =
@@ -430,7 +439,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<String> name,
       Value<bool> done,
       Value<String?> remoteId,
-      Value<DateTime> updatedAt,
+      Value<DateTime?> updatedAt,
       Value<bool> dirty,
     });
 
@@ -573,7 +582,7 @@ class $$TasksTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<bool> done = const Value.absent(),
                 Value<String?> remoteId = const Value.absent(),
-                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> dirty = const Value.absent(),
               }) => TasksCompanion(
                 id: id,
@@ -589,7 +598,7 @@ class $$TasksTableTableManager
                 required String name,
                 Value<bool> done = const Value.absent(),
                 Value<String?> remoteId = const Value.absent(),
-                Value<DateTime> updatedAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> dirty = const Value.absent(),
               }) => TasksCompanion.insert(
                 id: id,
