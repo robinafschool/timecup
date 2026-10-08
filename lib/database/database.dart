@@ -31,10 +31,14 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'cup_of_time'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) async {
+      await m.createAll();
+      await _createRemoteIdUniqueIndex();
+    },
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         // A previous version of this migration failed partway through
@@ -57,8 +61,32 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(tasks, tasks.dirty);
         }
       }
+      if (from < 3) {
+        // A race between push-sync and the Realtime subscription (both
+        // can end up inserting a local row for the same remote task) left
+        // some installs with duplicate rows sharing a remote_id. Collapse
+        // those down to one row each (keeping the oldest) before adding
+        // the unique index below, since the index creation would fail on
+        // top of existing duplicates.
+        await customStatement('''
+          DELETE FROM tasks
+          WHERE remote_id IS NOT NULL
+          AND id NOT IN (
+            SELECT MIN(id) FROM tasks
+            WHERE remote_id IS NOT NULL
+            GROUP BY remote_id
+          )
+        ''');
+        await _createRemoteIdUniqueIndex();
+      }
     },
   );
+
+  Future<void> _createRemoteIdUniqueIndex() {
+    return customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_remote_id ON tasks (remote_id)',
+    );
+  }
 
   Stream<List<Task>> watchAllTasks() {
     return (select(tasks)..orderBy([(t) => OrderingTerm(expression: t.id)]))
@@ -113,6 +141,13 @@ class AppDatabase extends _$AppDatabase {
 
   /// Inserts a row pulled down from Supabase. Marked as not dirty since it
   /// already matches the remote state.
+  ///
+  /// Uses `insertOrIgnore` because this is called both from the periodic
+  /// pull and from the Realtime insert handler, which race against the
+  /// local push path marking its own freshly-created row as synced. The
+  /// unique index on `remote_id` means at most one of those concurrent
+  /// attempts can win; this one is allowed to silently lose rather than
+  /// throw or create a duplicate.
   Future<void> insertFromRemote({
     required String remoteId,
     required String name,
@@ -127,6 +162,7 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: Value(updatedAt),
         dirty: const Value(false),
       ),
+      mode: InsertMode.insertOrIgnore,
     );
   }
 

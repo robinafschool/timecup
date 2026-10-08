@@ -21,15 +21,20 @@ class SyncService {
   final AppDatabase _db;
 
   RealtimeChannel? _channel;
+  bool _syncing = false;
 
   SupabaseClient get _client => Supabase.instance.client;
 
   Future<void> sync() async {
+    if (_syncing) return;
+    _syncing = true;
     try {
       await _push();
       await _pull();
     } catch (e) {
       debugPrint('SyncService: sync failed, will retry later: $e');
+    } finally {
+      _syncing = false;
     }
   }
 
