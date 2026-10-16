@@ -1,7 +1,10 @@
-/// Fill these in with your own Supabase project's values.
-/// Find them in your Supabase project under Settings > API.
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+/// Reads Supabase connection details from the environment, loaded from a
+/// local `.env` file (see `.env.example` for the required keys). `.env` is
+/// gitignored, so these values are never committed.
 class SupabaseConfig {
-  static const String url = 'https://gmdfblzezihsfembkoga.supabase.co';
-  static const String publishableKey =
-      'sb_publishable_-wJnskyxQqPvcXmv-qb6LA_syxCCx5l';
+  static String get url => dotenv.env['SUPABASE_URL'] ?? '';
+  static String get publishableKey =>
+      dotenv.env['SUPABASE_PUBLISHABLE_KEY'] ?? '';
 }

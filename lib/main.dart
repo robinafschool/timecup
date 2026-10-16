@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
@@ -9,6 +10,7 @@ import 'database/database.dart';
 import 'sync/sync_service.dart';
 
 Future<void> main() async {
+  await dotenv.load();
   await Supabase.initialize(
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
